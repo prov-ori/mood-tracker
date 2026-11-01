@@ -1,0 +1,20 @@
+import {fields,labels,summary,validateSnapshot,escapeHTML as esc,daysBetween} from './domain.js';
+const number=v=>v===null?'—':Number(v).toLocaleString('ru-RU',{maximumFractionDigits:1});
+const date=d=>new Date(d+'T12:00:00Z').toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+function graph(rows,keys,start,end,sleep=false){
+ const total=daysBetween(start,end),max=sleep?24:4;
+ const x=d=>35+(Date.parse(d)-Date.parse(start))/86400000/Math.max(1,total-1)*845;
+ const y=v=>15+(max-v)/max*175;
+ const colors={low:'#a26a70',activation:'#ba873c',energy:'#457c6a',sleep:'#6685b1'};
+ let svg=`<svg class="chart" viewBox="0 0 900 220" role="img" aria-label="График наблюдений. Разрывы обозначают пропуски.">`;
+ for(let i=0;i<=4;i++)svg+=`<line x1="35" y1="${y(i*max/4)}" x2="880" y2="${y(i*max/4)}" stroke="#ddd"/><text x="5" y="${y(i*max/4)+4}" class="axis">${i*max/4}</text>`;
+ for(const k of keys){let previous;for(const row of rows){if(previous&&daysBetween(previous.date,row.date)===2)svg+=`<line x1="${x(previous.date)}" y1="${y(previous[k])}" x2="${x(row.date)}" y2="${y(row[k])}" stroke="${colors[k]}" stroke-width="2"/>`;svg+=`<circle cx="${x(row.date)}" cy="${y(row[k])}" r="3" fill="${colors[k]}"><title>${esc(date(row.date))}: ${esc(labels[k])} ${row[k]}</title></circle>`;previous=row;}}
+ return svg+`<text x="35" y="215" class="axis">${esc(date(start))}</text><text x="880" y="215" text-anchor="end" class="axis">${esc(date(end))}</text></svg>`;
+}
+export function renderReport(report){
+ if(!report||typeof report.title!=='string'||report.title.length>120)throw Error('Некорректный отчёт.');
+ const snap=validateSnapshot(report.snapshot),s=summary(snap.entries,snap.start,snap.end);
+ const stamp=new Date(report.created_at);
+ const saved=Number.isNaN(stamp.getTime())?'Дата не указана':stamp.toLocaleString('ru-RU',{timeZone:snap.timezone});
+ return `<article class="print-report"><div class="eyebrow">MOOD ATLAS · СНИМОК НАБЛЮДЕНИЙ</div><h1>${esc(report.title)}</h1><p>${esc(date(snap.start))} — ${esc(date(snap.end))} · часовой пояс ${esc(snap.timezone)}</p><p class="hint">Сохранён ${esc(saved)}. Личные оценки, не клиническая шкала. Отчёт не является диагнозом.</p>${snap.detailsIncluded===false?'<div class="notice">Личные заметки, события и сведения о препаратах исключены из этого снимка.</div>':''}${snap.questions?`<section class="visit-note"><h2>Вопросы к встрече</h2><p>${esc(snap.questions)}</p></section>`:''}<div class="stats"><div class="card stat"><span>Заполнено дней</span><strong>${s.filled}<small> / ${s.days}</small></strong><p>${s.coverage}% периода · пропущено ${s.missing}</p></div><div class="card stat"><span>Средний сон</span><strong>${number(s.averages.sleep)}<small> ч</small></strong><p>По заполненным дням</p></div><div class="card stat"><span>Средняя энергия</span><strong>${number(s.averages.energy)}<small> / 4</small></strong><p>Личная оценка состояния</p></div></div><h2>Динамика состояния</h2><div class="legend"><span class="low">● Сниженное настроение</span><span class="activation">● Активация</span><span class="energy">● Энергия</span></div>${graph(s.entries,['low','activation','energy'],snap.start,snap.end)}<h2>Сон, часов</h2>${graph(s.entries,['sleep'],snap.start,snap.end,true)}<h2>Средние показатели</h2><p>${fields.map(k=>`${labels[k]}: ${number(s.averages[k])} / 4`).join(' · ')}</p><p>Пропуски не считаются нормальным состоянием. Средние рассчитаны только по заполненным дням.</p><h2>Записи за период</h2>${s.entries.length?`<div class="table-wrap" tabindex="0" role="region" aria-label="Записи отчёта"><table><thead><tr><th>Дата</th>${fields.map(k=>`<th>${esc(labels[k])}</th>`).join('')}<th>Сон, ч</th><th>Препараты</th><th>События</th><th>Заметки</th></tr></thead><tbody>${s.entries.map(e=>`<tr><td>${esc(date(e.date))}</td>${fields.map(k=>`<td>${e[k]}</td>`).join('')}<td>${number(e.sleep)}</td><td class="wrap">${esc(e.medication)}</td><td class="wrap">${esc(e.events)}</td><td class="wrap">${esc(e.notes)}</td></tr>`).join('')}</tbody></table></div>`:'<p>Записей нет.</p>'}</article>`;
+}
