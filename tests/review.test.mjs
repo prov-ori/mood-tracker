@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {weekSummary,filterReports,backupStatus,shiftDate} from '../public/domain.js';
+const row=(date,sleep)=>({date,low:1,activation:2,energy:3,anxiety:0,irritability:0,sleep,notes:'',events:'',medication:''});
+test('Weekly windows are non-overlapping and retain observed counts',()=>{const w=weekSummary([row('2026-01-07',6),row('2026-01-08',8),row('2026-01-14',10)],'2026-01-14');assert.equal(w.start,'2026-01-08');assert.equal(w.previousStart,'2026-01-01');assert.equal(w.previousEnd,'2026-01-07');assert.equal(w.current.filled,2);assert.equal(w.previous.filled,1);assert.equal(w.current.missing,5);assert.equal(w.differences.sleep,3);});
+test('Empty comparison windows yield unknown differences',()=>{assert.equal(weekSummary([row('2026-01-14',8)],'2026-01-14').differences.sleep,null);assert.equal(weekSummary([],'2026-01-14').current.averages.sleep,null);});
+test('Date shifts include leap days and reject database overflow',()=>{assert.equal(shiftDate('2024-03-01',-1),'2024-02-29');assert.throws(()=>weekSummary([],'1900-01-10'));assert.throws(()=>shiftDate('2200-12-31',1));});
+const reports=[{title:'Зима',created_at:'2026-01-01',snapshot:{start:'2025-12-01',end:'2025-12-31'}},{title:'Весна',created_at:'2026-03-01',snapshot:{start:'2026-02-01',end:'2026-02-28'}}];
+test('Report search is case-insensitive and supports ISO dates',()=>{assert.deepEqual(filterReports(reports,'ЗИМА').map(x=>x.title),['Зима']);assert.equal(filterReports(reports,'2026-02').length,1);assert.equal(filterReports(reports,'none').length,0);});
+test('Report sort does not mutate the source array',()=>{assert.equal(filterReports(reports,'','title')[0].title,'Весна');assert.equal(filterReports(reports,'','period')[0].title,'Весна');assert.equal(reports[0].title,'Зима');});
+test('Backup reminder treats stale, invalid and future dates distinctly',()=>{const now=Date.parse('2026-11-01T12:00:00Z');assert.deepEqual(backupStatus('2026-10-31T12:00:00Z',now),{days:1,due:false});assert.equal(backupStatus('2026-10-01T12:00:00Z',now).due,true);assert.deepEqual(backupStatus('broken',now),{days:null,due:true});assert.deepEqual(backupStatus('2027-01-01T00:00:00Z',now),{days:null,due:true});});

@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {encryptBackup,decryptBackup,isEncryptedBackup} from '../public/backup.js';
+const phrase='separate long passphrase 123';
+const raw=JSON.stringify({format:'mood-atlas',version:1,entries:[],reports:[],note:'Запись с переносом\nи символом 🌿'});
+let encrypted;
+test('AES-GCM backup roundtrip preserves UTF-8 and has no plaintext records',async()=>{encrypted=await encryptBackup(raw,phrase);assert.equal(isEncryptedBackup(encrypted),true);assert.equal(encrypted.includes('Запись'),false);assert.equal(await decryptBackup(encrypted,phrase),raw);});
+test('Every export uses fresh salt and IV',async()=>{const second=JSON.parse(await encryptBackup(raw,phrase)),first=JSON.parse(encrypted);assert.notEqual(first.salt,second.salt);assert.notEqual(first.iv,second.iv);assert.notEqual(first.data,second.data);});
+test('Wrong password cannot decrypt the backup',async()=>{await assert.rejects(()=>decryptBackup(encrypted,'another incorrect password'),/неверный пароль или файл повреждён/);});
+test('Modified ciphertext is rejected by authentication',async()=>{const x=JSON.parse(encrypted);x.data=(x.data[0]==='A'?'B':'A')+x.data.slice(1);await assert.rejects(()=>decryptBackup(JSON.stringify(x),phrase),/неверный пароль или файл повреждён/);});
+test('Unexpected work factors and algorithms are rejected before key derivation',async()=>{for(const patch of [{iterations:999999999},{cipher:'AES-CBC'},{version:2},{iv:'invalid'}])await assert.rejects(()=>decryptBackup(JSON.stringify({...JSON.parse(encrypted),...patch}),phrase));});
+test('Short passwords and malformed files get explicit errors',async()=>{await assert.rejects(()=>encryptBackup(raw,'short'),/от 12 до 128/);await assert.rejects(()=>decryptBackup('not JSON',phrase),/Некорректный формат/);assert.equal(isEncryptedBackup(raw),false);});

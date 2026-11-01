@@ -78,3 +78,26 @@ export function demoEntries(today) {
     return {date:d.toISOString().slice(0,10),low:Math.max(0,Math.round(1-v)),activation:Math.max(0,Math.round(v+1)),energy:Math.round(2+v),anxiety:Math.round(1+Math.abs(v)),irritability:i%7===0?2:1,sleep:7.5-Math.round(v*4)/4,medication:'',events:i%9===0?'Прогулка, спокойный вечер':'',notes:i%9===0?'После прогулки было легче сосредоточиться.':''};
   }).filter((_,i)=>i%8!==0);
 }
+
+export function shiftDate(date,days){
+  if(!validDate(date)||!Number.isInteger(days))throw Error('Некорректная дата.');
+  const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);
+  const result=d.toISOString().slice(0,10);if(!validDate(result))throw Error('Период выходит за доступные границы дат.');return result;
+}
+export function weekSummary(entries,lastDate){
+  const start=shiftDate(lastDate,-6),previousEnd=shiftDate(start,-1),previousStart=shiftDate(previousEnd,-6);
+  const current=summary(entries,start,lastDate),previous=summary(entries,previousStart,previousEnd);
+  const differences=Object.fromEntries([...fields,'sleep'].map(k=>[k,current.filled&&previous.filled?current.averages[k]-previous.averages[k]:null]));
+  return {start,end:lastDate,previousStart,previousEnd,current,previous,differences};
+}
+export function filterReports(reports,query='',sort='created'){
+  const q=String(query).trim().toLocaleLowerCase('ru');
+  const rows=reports.filter(r=>!q||r.title.toLocaleLowerCase('ru').includes(q)||r.snapshot.start.includes(q)||r.snapshot.end.includes(q));
+  const byTitle=(a,b)=>a.title.localeCompare(b.title,'ru');
+  return rows.sort(sort==='title'?byTitle:sort==='period'?(a,b)=>b.snapshot.end.localeCompare(a.snapshot.end)||byTitle(a,b):(a,b)=>String(b.created_at).localeCompare(String(a.created_at))||byTitle(a,b));
+}
+export function backupStatus(lastTimestamp,now=Date.now()){
+  const stamp=typeof lastTimestamp==='string'?Date.parse(lastTimestamp):NaN;
+  if(!Number.isFinite(stamp)||stamp>now)return {days:null,due:true};
+  const days=Math.floor((now-stamp)/86400000);return {days,due:days>=30};
+}
