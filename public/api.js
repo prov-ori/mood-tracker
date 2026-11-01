@@ -30,7 +30,7 @@ export const api={
   async password(password){return request('/auth/v1/user',{method:'PUT',auth:true,body:{password}});},
   async logout(){try{if(session)await request('/auth/v1/logout',{method:'POST',auth:true});}finally{save(null);}},
   clear(){save(null);},
-  async all(table){let out=[],offset=0;for(;;){const rows=await request(`/rest/v1/${table}?select=*&order=${table==='entries'?'date.asc':'created_at.desc,id.asc'}&limit=1000&offset=${offset}`,{auth:true});out.push(...rows);if(rows.length<1000)return out;offset+=rows.length;}},
+  async all(table){let out=[],offset=0;for(;;){const rows=await request(`/rest/v1/${table}?select=*&order=${table==='entries'?'date.asc':table==='profiles'?'user_id.asc':'created_at.desc,id.asc'}&limit=1000&offset=${offset}`,{auth:true});out.push(...rows);if(rows.length<1000)return out;offset+=rows.length;}},
   async upsert(table,data,conflict){return request(`/rest/v1/${table}?on_conflict=${conflict}`,{method:'POST',auth:true,body:data,headers:{Prefer:'resolution=merge-duplicates,return=representation'}});},
   async insert(table,data){return request('/rest/v1/'+table,{method:'POST',auth:true,body:data,headers:{Prefer:'return=representation'}});},
   async remove(table,filter){return request(`/rest/v1/${table}?${filter}`,{method:'DELETE',auth:true});},
